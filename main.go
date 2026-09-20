@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	mongocli "github.com/MadBox-Games/backend-engineer-hiring/internal/mongo"
@@ -22,18 +25,34 @@ func main() {
 	if err != nil {
 		log.Fatalf("mongo connect: %v", err)
 	}
-	// Paired with Connect. log.Fatal and signal-based termination both
-	// skip defers, so this won't fire in the current shape — it's here
-	// to document ownership and to be correct if main ever returns
-	// normally (e.g., you add graceful shutdown).
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = client.Disconnect(ctx)
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: newMux(client),
+	}
+
+	// Graceful shutdown
+	go func() {
+		log.Printf("server listening on %s", addr)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server forced shutdown: %v", err)
+		}
 	}()
 
-	log.Printf("server listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, newMux(client)))
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	<-quit
+	log.Println("graceful server shutdown...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatalf("server forced to suhdown with active connections: %v", err)
+	}
+
+	log.Println("server shutdown finished")
 }
 
 // newMux builds the HTTP handler tree with the Mongo client wired in.
