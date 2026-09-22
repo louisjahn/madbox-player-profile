@@ -1,4 +1,4 @@
-module github.com/MadBox-Games/backend-engineer-hiring
+module madbox-player-profile
 
 go 1.22
 

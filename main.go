@@ -78,6 +78,10 @@ func newMux(client *mongo.Client) *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	db := client.Database(getenv("MONGO_DB", "profiles"))
+	playerSvc := player.NewService(mongorepo.NewRepo(db))
+	player.NewHandler(playerSvc).Routes(mux)
+
 	return mux
 }
 
