@@ -3,18 +3,23 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	mongocli "github.com/MadBox-Games/backend-engineer-hiring/internal/mongo"
+	mongocli "madbox-player-profile/internal/mongo"
+	"madbox-player-profile/internal/player"
+	"madbox-player-profile/internal/player/mongorepo"
+
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	addr := getenv("HTTP_ADDR", ":8080")
 	mongoURI := getenv("MONGO_URI", "mongodb://localhost:27017")
 
@@ -23,19 +28,21 @@ func main() {
 
 	client, err := mongocli.Connect(connectCtx, mongoURI)
 	if err != nil {
-		log.Fatalf("mongo connect: %v", err)
+		slog.Error("mongo connect", "err", err)
 	}
+	defer client.Disconnect(context.Background())
 
 	server := &http.Server{
-		Addr:    addr,
-		Handler: newMux(client),
+		Addr:              addr,
+		Handler:           newMux(client),
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	// Graceful shutdown
 	go func() {
-		log.Printf("server listening on %s", addr)
+		slog.Info("server listening", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("server forced shutdown: %v", err)
+			slog.Error("server forced shutdown", "err", err)
 		}
 	}()
 
@@ -43,16 +50,16 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	<-quit
-	log.Println("graceful server shutdown...")
+	slog.Info("graceful server shutdown...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("server forced to suhdown with active connections: %v", err)
+		slog.Error("server forced to suhtdown with active connections", "err", err)
 	}
 
-	log.Println("server shutdown finished")
+	slog.Info("server shutdown finished")
 }
 
 // newMux builds the HTTP handler tree with the Mongo client wired in.
