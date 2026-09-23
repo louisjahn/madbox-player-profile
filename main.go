@@ -15,6 +15,7 @@ import (
 	mongocli "madbox-player-profile/internal/mongo"
 	"madbox-player-profile/internal/player"
 	playermongorepo "madbox-player-profile/internal/player/mongorepo"
+	"madbox-player-profile/internal/session"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -69,6 +70,19 @@ func main() {
 // keeps the handler wiring testable — see main_test.go.
 func newMux(client *mongo.Client) *http.ServeMux {
 	mux := http.NewServeMux()
+	db := client.Database(getenv("MONGO_DB", "profiles"))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	playerRepo := playermongorepo.NewRepo(db)
+	eventRepo := eventmongorepo.NewRepo(db)
+	if err := eventRepo.EnsureIndexes(ctx); err != nil {
+		slog.Warn("ensure events index failed", "err", err)
+	}
+
+	playerSvc := player.NewService(playerRepo)
+	eventSvc := event.NewService(eventRepo, playerSvc)
+	sessionSvc := session.NewService(playerSvc, eventRepo, session.Config{})
 
 	// Example handler showing how to thread `client` into a handler.
 	// Keep, replace, or delete — it's a reference, not a requirement.
@@ -79,20 +93,9 @@ func newMux(client *mongo.Client) *http.ServeMux {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-
-	db := client.Database(getenv("MONGO_DB", "profiles"))
-	playerSvc := player.NewService(playermongorepo.NewRepo(db))
-
-	evRep := eventmongorepo.NewRepo(db)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-	if err := evRep.EnsureIndexes(ctx); err != nil {
-		slog.Warn("ensure events index failed", "err", err)
-	}
-	eventSvc := event.NewService(evRep, playerSvc)
-
 	player.NewHandler(playerSvc).Routes(mux)
 	event.NewHandler(eventSvc).Routes(mux)
+	session.NewHandler(sessionSvc).Routes(mux)
 
 	return mux
 }

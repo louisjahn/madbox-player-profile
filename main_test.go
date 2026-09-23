@@ -23,7 +23,7 @@ import (
 // clean up in t.Cleanup) so tests don't see each other's writes.
 var (
 	testMongo  *mongo.Client
-	testServer *httptest.Server
+	testServer TestServer
 )
 
 // TestMain boots a real MongoDB container via testcontainers-go, connects
@@ -54,11 +54,12 @@ func TestMain(m *testing.M) {
 		log.Fatalf("connect mongo: %v", err)
 	}
 
-	testServer = httptest.NewServer(newMux(testMongo))
+	testServer.s = httptest.NewServer(newMux(testMongo))
+	testServer.db = testMongo.Database("profiles")
 
 	// os.Exit skips deferred cleanup, so tear down explicitly here.
 	code := m.Run()
-	testServer.Close()
+	testServer.s.Close()
 	_ = testMongo.Disconnect(context.Background())
 	_ = mongoC.Terminate(context.Background())
 	os.Exit(code)
@@ -67,7 +68,7 @@ func TestMain(m *testing.M) {
 // TestHealthz is a minimal example test showing how to use testServer.
 // Replace or delete it as you add tests for your own handlers.
 func TestHealthz(t *testing.T) {
-	resp, err := http.Get(testServer.URL + "/healthz")
+	resp, err := http.Get(testServer.s.URL + "/healthz")
 	if err != nil {
 		t.Fatalf("get healthz: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestCreateInvalid(t *testing.T) {
-	req, err := http.NewRequest(http.MethodPut, testServer.URL+"/v1/players/!!!", nil)
+	req, err := http.NewRequest(http.MethodPut, testServer.s.URL+"/v1/players/!!!", nil)
 	if err != nil {
 		t.Fatalf("failed creating first put req")
 	}
@@ -98,7 +99,7 @@ func TestCreateInvalid(t *testing.T) {
 // Test creating a new player profile
 func TestCreate(t *testing.T) {
 	testID := t.Name()
-	req, err := http.NewRequest(http.MethodPut, testServer.URL+"/v1/players/"+testID, nil)
+	req, err := http.NewRequest(http.MethodPut, testServer.s.URL+"/v1/players/"+testID, nil)
 	if err != nil {
 		t.Fatalf("failed creating first put req")
 	}
@@ -114,7 +115,7 @@ func TestCreate(t *testing.T) {
 		t.Fatalf("profile creation received code: %v, expected 201 StatusCreated", resp.StatusCode)
 	}
 
-	req, err = http.NewRequest(http.MethodGet, testServer.URL+"/v1/players/"+testID, nil)
+	req, err = http.NewRequest(http.MethodGet, testServer.s.URL+"/v1/players/"+testID, nil)
 	if err != nil {
 		t.Fatalf("failed creating get req")
 	}
@@ -133,7 +134,7 @@ func TestCreate(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	req, err = http.NewRequest(http.MethodPut, testServer.URL+"/v1/players/"+testID, nil)
+	req, err = http.NewRequest(http.MethodPut, testServer.s.URL+"/v1/players/"+testID, nil)
 	if err != nil {
 		t.Fatalf("failed creating second req")
 	}
@@ -147,7 +148,7 @@ func TestCreate(t *testing.T) {
 		t.Fatalf("profile creation received code: %v, expected 200 StatusOk", resp.StatusCode)
 	}
 
-	req, err = http.NewRequest(http.MethodGet, testServer.URL+"/v1/players/"+testID, nil)
+	req, err = http.NewRequest(http.MethodGet, testServer.s.URL+"/v1/players/"+testID, nil)
 	if err != nil {
 		t.Fatalf("failed creating get req")
 	}
@@ -172,7 +173,7 @@ func TestCreate(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	testID := t.Name()
-	req, err := http.NewRequest(http.MethodPut, testServer.URL+"/v1/players/"+testID, nil)
+	req, err := http.NewRequest(http.MethodPut, testServer.s.URL+"/v1/players/"+testID, nil)
 	if err != nil {
 		t.Fatalf("failed creating first put req")
 	}
@@ -192,7 +193,7 @@ func TestUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed serializing patch: %v", err)
 	}
-	req, err = http.NewRequest(http.MethodPatch, testServer.URL+"/v1/players/"+testID, bytes.NewBuffer(bodyBytes))
+	req, err = http.NewRequest(http.MethodPatch, testServer.s.URL+"/v1/players/"+testID, bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		t.Fatalf("failed creating patch req")
 	}

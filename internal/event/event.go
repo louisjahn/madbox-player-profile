@@ -19,6 +19,14 @@ type Event struct {
 	Payload    map[string]any `json:"payload,omitempty" bson:"payload,omitempty"`
 }
 
+type Response struct {
+	ID        string         `json:"id"`
+	PlayerID  string         `json:"player_id"`
+	Type      string         `json:"type"`
+	Timestamp time.Time      `json:"timestamp"`
+	Payload   map[string]any `json:"payload,omitempty"`
+}
+
 // RecordRequest is the wire DTO. Timestamp is optional: absent means "now".
 type RecordRequest struct {
 	Type      string         `json:"type"`
@@ -60,4 +68,18 @@ func (f Filter) normalized() Filter {
 		f.Limit = MaxLimit
 	}
 	return f
+}
+
+func ToResponses(events []Event) []Response {
+	var resp []Response
+	for _, e := range events {
+		resp = append(resp, Response{
+			ID:        e.ID.String(),
+			PlayerID:  e.PlayerID,
+			Type:      e.Type,
+			Timestamp: e.Timestamp,
+			Payload:   e.Payload,
+		})
+	}
+	return resp
 }

@@ -17,6 +17,12 @@ type Player struct {
 	UpdatedAt   time.Time `json:"updated_at" bson:"updated_at"`
 }
 
+type Response struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name,omitempty"`
+	Country     string `json:"country,omitempty"`
+}
+
 // Patch is a partial update.
 // Use pointers to know when field is empty or not sent.
 type Patch struct {
@@ -56,4 +62,12 @@ func (p Patch) validate() error {
 		return fmt.Errorf("%w: country must be ISO 3166-1 alpha-2", ErrInvalidPatch)
 	}
 	return nil
+}
+
+func ToResponse(p Player) Response {
+	return Response{
+		ID:          p.ID,
+		DisplayName: p.DisplayName,
+		Country:     p.Country,
+	}
 }
