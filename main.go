@@ -10,9 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"madbox-player-profile/internal/event"
+	eventmongorepo "madbox-player-profile/internal/event/mongorepo"
 	mongocli "madbox-player-profile/internal/mongo"
 	"madbox-player-profile/internal/player"
-	"madbox-player-profile/internal/player/mongorepo"
+	playermongorepo "madbox-player-profile/internal/player/mongorepo"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -79,8 +81,11 @@ func newMux(client *mongo.Client) *http.ServeMux {
 	})
 
 	db := client.Database(getenv("MONGO_DB", "profiles"))
-	playerSvc := player.NewService(mongorepo.NewRepo(db))
+	playerSvc := player.NewService(playermongorepo.NewRepo(db))
+	eventSvc := event.NewService(eventmongorepo.NewRepo(db), playerSvc)
+
 	player.NewHandler(playerSvc).Routes(mux)
+	event.NewHandler(eventSvc).Routes(mux)
 
 	return mux
 }

@@ -95,8 +95,7 @@ func TestCreateInvalid(t *testing.T) {
 	}
 }
 
-// Test creating a new profile.
-// Expects the profiles table not to have the hard coded id below.
+// Test creating a new player profile
 func TestCreate(t *testing.T) {
 	testID := t.Name()
 	req, err := http.NewRequest(http.MethodPut, testServer.URL+"/v1/players/"+testID, nil)
