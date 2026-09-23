@@ -82,7 +82,14 @@ func newMux(client *mongo.Client) *http.ServeMux {
 
 	db := client.Database(getenv("MONGO_DB", "profiles"))
 	playerSvc := player.NewService(playermongorepo.NewRepo(db))
-	eventSvc := event.NewService(eventmongorepo.NewRepo(db), playerSvc)
+
+	evRep := eventmongorepo.NewRepo(db)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	if err := evRep.EnsureIndexes(ctx); err != nil {
+		slog.Warn("ensure events index failed", "err", err)
+	}
+	eventSvc := event.NewService(evRep, playerSvc)
 
 	player.NewHandler(playerSvc).Routes(mux)
 	event.NewHandler(eventSvc).Routes(mux)
